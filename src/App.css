@@ -64,15 +64,17 @@ body::after {
   z-index: -1;
 }
 .leads {
-  margin-left: auto;
   display: flex;
   justify-content: flex-end;
+  margin-right: auto;
+  align-items: center;
+  width: 100vw;
   padding-right: 2vw;
+  gap: 2vw;
   margin-top: 2vh;
 }
-.leads button {
+.leads .manage-leads-button {
   background: linear-gradient(135deg, #06B6D4, #054656);
-  margin-left: auto;
   z-index: 999;
   padding: 0.5rem 1rem;
   border: none;
@@ -83,9 +85,16 @@ body::after {
   cursor: pointer;
   transition: all 0.5s;
 }
-.leads button:hover {
+.leads .manage-leads-button:hover {
   background: linear-gradient(165deg, #07849a, #054656);
   transform: translateY(-2px); 
+}
+.login-page  {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  width: 100vw;
 }
 .dialer { 
   width: 100vw;
@@ -290,8 +299,8 @@ body::after {
   background: #333;
   border: none;
   border-radius: 12px;
-  color: #fff;
-  font-size: 24px;
+  color: #abc8cc;
+  font-size: 16px;
   text-align: center;
   margin-bottom: 24px;
   outline: none;
@@ -2176,18 +2185,20 @@ td {
   background-color: #1976D2;
 }
 
-.logout-button {
-  display: block;
-  margin: 20px auto;
-  padding: 10px 20px;
-  background-color: #f44336;
+.logout-button {  
+  background-color: #f44336 !important;
   color: white;
-  border: none;
+  padding: 0.5rem 1rem;
+  border: none; 
+  font-weight: 500;
+  font-size: 1rem;
   border-radius: 4px;
   cursor: pointer;
-  transition: background-color 0.3s ease;
+  transition: all 0.5s;
 }
 
 .logout-button:hover {
-  background-color: #d32f2f;
+  background-color: #860303 !important; 
+  transform: translateY(-2px); 
 }
+

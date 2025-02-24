@@ -3,11 +3,12 @@ import { Device } from '@twilio/voice-sdk';
 import io from 'socket.io-client';
 import axios from 'axios';
 import './App.css';
-import {FiPhoneCall, FiPhone } from "react-icons/fi";
+import { FiPhoneCall, FiPhone } from "react-icons/fi";
 import { FaPhoneAlt, FaEdit } from 'react-icons/fa';
-import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
+import { BrowserRouter as Router, Route, Routes, Navigate, useNavigate } from 'react-router-dom';
 import LoginPage from './pages/LoginPage';
-import { AuthProvider } from './context/AuthContext';
+import { useAuth } from './context/AuthContext';
+import ProtectedRoute from './pages/components/ProtectedRoute';
 
 const NotificationSound = ({ play }) => {
     useEffect(() => {
@@ -94,6 +95,7 @@ function App() {
     const [showUploadModal, setShowUploadModal] = useState(false);
     const [file, setFile] = useState(null);
     const [phoneNumber, setPhoneNumber] = useState('');
+    const { logout, user } = useAuth();
     const [calls, setCalls] = useState([]);
     const [activeCall, setActiveCall] = useState(null);
     const [callHistory, setCallHistory] = useState([]);
@@ -116,7 +118,7 @@ function App() {
     const [totalPages, setTotalPages] = useState(5);
     const [selectedLeads, setSelectedLeads] = useState([]);
     const [editingLead, setEditingLead] = useState(null);
-
+    const navigate = useNavigate();
     const handleFileUpload = async () => {
         console.log('📁 File selected:', file);
         if (!file) return;
@@ -154,6 +156,10 @@ function App() {
     };
 
     // Refs
+    const handleLogout = () => {
+        logout();
+        navigate('/login');
+    };
     const soundIntervalRef = useRef(null);
     const timerRef = useRef(null);
     useEffect(() => {
@@ -203,7 +209,11 @@ function App() {
             socket.off('callEnded', handleMobileCallEnd);
         };
     }, [currentConnection, device]);
-
+    useEffect(() => {
+        if (!user) {
+            navigate("/login"); // Redirect to login page when user logs out
+        }
+    }, [user, navigate]); // Runs every time `user` changes
     useEffect(() => {
         console.log('🔄 Setting up socket event listeners...');
 
@@ -782,260 +792,258 @@ function App() {
     };
 
     return (
-        <AuthProvider>
-            <Router>
-                <Routes>
-                    <Route path="/login" element={<LoginPage />} />
-                    <Route path="/dashboard" element={
-                        <>
-                            <div className='leads'>
-                                <button onClick={toggleLeadsTable}>Manage Leads</button>
-                            </div>
-                            {showLeadsTable && (
-                                <div className={`leads-table ${showLeadsTable ? 'open' : ''}`}>
-                                    <button
-                                        className="upload-button"
-                                        onClick={() => setShowUploadModal(true)}
-                                    >
-                                        Import Leads
-                                    </button>
-                                    {selectedLeads.length > 0 && (
-                                        <div>
-                                            <button className="delete-button" onClick={handleDeleteSelectedLeads}>
-                                                Delete Selected
-                                            </button>
-                                        </div>
-                                    )}
-                                    <p className='total-leads'>Total Leads: {totalLeads}</p>
+    <Routes>
+            <Route path="/login" element={<LoginPage />} />
 
-                                    <table>
-                                        <thead>
-                                            <tr>
-                                                <th>
-                                                    <input
-                                                        type="checkbox"
-                                                        className='select-leads'
-                                                        checked={selectedLeads?.length === leads?.length && leads?.length > 0}
-                                                        onChange={handleSelectAllLeads}
-                                                    />
-                                                </th>
-                                                <th>Name</th>
-                                                <th>Phone</th>
-                                                <th>Status</th>
-                                                <th>Last Contacted</th>
-                                                <th>Action</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {leads?.map((lead) => (
-                                                <tr key={lead._id}>
-                                                    <td>
-                                                        <input
-                                                            type="checkbox"
-                                                            className='select-leads'
-                                                            checked={selectedLeads.includes(lead._id)}
-                                                            onChange={() => handleSelectLead(lead._id)}
-                                                        />
-                                                    </td>
-                                                    <td>{lead.name}</td>
-                                                    <td>{lead.phoneNumber}</td>
-                                                    <td>{lead.status}</td>
-                                                    <td>{lead.lastContacted}</td>
-                                                    <td className='action-buttons'>
-                                                        <button className='dial-button' onClick={() => handleDial(lead.phoneNumber)}>
-                                                            <FaPhoneAlt />
-                                                        </button>
-                                                        <button className='edit-button' onClick={() => handleEditLead(lead)}>
-                                                            <FaEdit />
-                                                        </button>
-                                                    </td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                    <div className='pagination-controls'>
-                                        <button onClick={() => handlePageChange(currentPage - 1)} disabled={currentPage === 1}>&lt;</button>
-                                        {[...Array(totalPages).keys()].map((i) => (
-                                            <button
-                                                key={i + 1}
-                                                onClick={() => handlePageChange(i + 1)}
-                                                className={currentPage === i + 1 ? 'active' : ''}
-                                            >
-                                                {i + 1}
-                                            </button>
-                                        ))}
-                                        <button onClick={() => handlePageChange(currentPage + 1)} disabled={currentPage === totalPages}>&gt;</button>
-                                        <select onChange={handleRecordsPerPageChange} value={recordsPerPage}>
-                                            <option value={10}>10</option>
-                                            <option value={25}>25</option>
-                                            <option value={50}>50</option>
-                                        </select>
-                                    </div>
+            <Route path="/" element={
+                <ProtectedRoute>
+                    <div className='leads'>
+                        <button className='logout-button' onClick={handleLogout}>Logout</button>
+                        <button className='manage-leads-button' onClick={toggleLeadsTable}>Manage Leads</button>
+                    </div>
+                    {showLeadsTable && (
+                        <div className={`leads-table ${showLeadsTable ? 'open' : ''}`}>
+                            <button
+                                className="upload-button"
+                                onClick={() => setShowUploadModal(true)}
+                            >
+                                Import Leads
+                            </button>
+                            {selectedLeads.length > 0 && (
+                                <div>
+                                    <button className="delete-button" onClick={handleDeleteSelectedLeads}>
+                                        Delete Selected
+                                    </button>
                                 </div>
                             )}
-                            <div className='dialer'>
-                                <div className="dialer-container">
-                                    <NotificationSound play={shouldPlaySound} />
-                                    <div className="dialer-header">
-                                        <div className="dialer-title">Zolara<span>Talk</span></div>
-                                        <div className="dialer-subtitle">Connect Seamlessly, Talk Freely</div>
+                            <p className='total-leads'>Total Leads: {totalLeads}</p>
+
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>
+                                            <input
+                                                type="checkbox"
+                                                className='select-leads'
+                                                checked={selectedLeads?.length === leads?.length && leads?.length > 0}
+                                                onChange={handleSelectAllLeads}
+                                            />
+                                        </th>
+                                        <th>Name</th>
+                                        <th>Phone</th>
+                                        <th>Status</th>
+                                        <th>Last Contacted</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {leads?.map((lead) => (
+                                        <tr key={lead._id}>
+                                            <td>
+                                                <input
+                                                    type="checkbox"
+                                                    className='select-leads'
+                                                    checked={selectedLeads.includes(lead._id)}
+                                                    onChange={() => handleSelectLead(lead._id)}
+                                                />
+                                            </td>
+                                            <td>{lead.name}</td>
+                                            <td>{lead.phoneNumber}</td>
+                                            <td>{lead.status}</td>
+                                            <td>{lead.lastContacted}</td>
+                                            <td className='action-buttons'>
+                                                <button className='dial-button' onClick={() => handleDial(lead.phoneNumber)}>
+                                                    <FaPhoneAlt />
+                                                </button>
+                                                <button className='edit-button' onClick={() => handleEditLead(lead)}>
+                                                    <FaEdit />
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                            <div className='pagination-controls'>
+                                <button onClick={() => handlePageChange(currentPage - 1)} disabled={currentPage === 1}>&lt;</button>
+                                {[...Array(totalPages).keys()].map((i) => (
+                                    <button
+                                        key={i + 1}
+                                        onClick={() => handlePageChange(i + 1)}
+                                        className={currentPage === i + 1 ? 'active' : ''}
+                                    >
+                                        {i + 1}
+                                    </button>
+                                ))}
+                                <button onClick={() => handlePageChange(currentPage + 1)} disabled={currentPage === totalPages}>&gt;</button>
+                                <select onChange={handleRecordsPerPageChange} value={recordsPerPage}>
+                                    <option value={10}>10</option>
+                                    <option value={25}>25</option>
+                                    <option value={50}>50</option>
+                                </select>
+                            </div>
+                        </div>
+                    )}
+                    <div className='dialer'>
+                        <div className="dialer-container">
+                            <NotificationSound play={shouldPlaySound} />
+                            <div className="dialer-header">
+                                <div className="dialer-title">Zolara<span>Talk</span></div>
+                                <div className="dialer-subtitle">Connect Seamlessly, Talk Freely</div>
+                            </div>
+
+                            {incomingCall && !activeCall ? (
+                                <div className="incoming-call-alert">
+                                    <div className="alert-content">
+                                        <h3>📞 Incoming Call</h3>
+                                        <p>From: {incomingCall.from}</p>
+                                        <div className="alert-actions">
+                                            <button className="call-action-button accept-action" onClick={handleAcceptCall} title="Accept Call">
+                                                <FiPhone />
+                                            </button>
+                                            <button className="call-action-button reject-action" onClick={handleRejectCall} title="Reject Call">
+                                                <FiPhoneCall />
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            ) : null}
+
+                            {activeCall && (
+                                <div className="active-call-container">
+                                    <h3>📞 Active Call</h3>
+                                    <div className="call-timer">{formatTime(callTimer)}</div>
+                                </div>
+                            )}
+
+
+                            <div className="tabs">
+                                <button className={`tab-button ${activeTab === 'dialer' ? 'active' : ''}`} onClick={() => setActiveTab('dialer')}>
+                                    Dialer
+                                </button>
+                                <button className={`tab-button ${activeTab === 'history' ? 'active' : ''}`} onClick={() => setActiveTab('history')}>
+                                    History
+                                </button>
+                            </div>
+
+                            {activeTab === 'dialer' ? (
+                                <>
+                                    <input type="text" className="phone-input" value={phoneNumber} onChange={(e) => setPhoneNumber(e.target.value)} placeholder="Enter phone number" />
+
+                                    <div className="dialpad">
+                                        {dialpadConfig?.map(({ number, letters }) => (
+                                            <button key={number} className="dialpad-button" onClick={() => setPhoneNumber(prev => prev + number)}>
+                                                <span className="number">{number}</span>
+                                                {letters && <span className="letters">{letters}</span>}
+                                            </button>
+                                        ))}
                                     </div>
 
-                                    {incomingCall && !activeCall ? (
-                                        <div className="incoming-call-alert">
-                                            <div className="alert-content">
-                                                <h3>📞 Incoming Call</h3>
-                                                <p>From: {incomingCall.from}</p>
-                                                <div className="alert-actions">
-                                                    <button className="call-action-button accept-action" onClick={handleAcceptCall} title="Accept Call">
-                                                        <FiPhone />
-                                                    </button>
-                                                    <button className="call-action-button reject-action" onClick={handleRejectCall} title="Reject Call">
-                                                        <FiPhoneCall />
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    ) : null}
+                                    <div className="action-buttons">
+                                        {!isCalling ? (
+                                            <button className="call-button" onClick={handleCall} disabled={!phoneNumber}>
+                                                Call
+                                            </button>
+                                        ) : (
+                                            <button className="end-call-button" onClick={handleEndCall}>
+                                                End Call
+                                            </button>
+                                        )}
 
-                                    {activeCall && (
-                                        <div className="active-call-container">
-                                            <h3>📞 Active Call</h3> 
-                                            <div className="call-timer">{formatTime(callTimer)}</div> 
-                                        </div>
-                                    )}
-
-
-                                    <div className="tabs">
-                                        <button className={`tab-button ${activeTab === 'dialer' ? 'active' : ''}`} onClick={() => setActiveTab('dialer')}>
-                                            Dialer
-                                        </button>
-                                        <button className={`tab-button ${activeTab === 'history' ? 'active' : ''}`} onClick={() => setActiveTab('history')}>
-                                            History
-                                        </button>
-                                    </div>
-
-                                    {activeTab === 'dialer' ? (
-                                        <>
-                                            <input type="text" className="phone-input" value={phoneNumber} onChange={(e) => setPhoneNumber(e.target.value)} placeholder="Enter phone number" />
-
-                                            <div className="dialpad">
-                                                {dialpadConfig?.map(({ number, letters }) => (
-                                                    <button key={number} className="dialpad-button" onClick={() => setPhoneNumber(prev => prev + number)}>
-                                                        <span className="number">{number}</span>
-                                                        {letters && <span className="letters">{letters}</span>}
-                                                    </button>
-                                                ))}
-                                            </div>
-
-                                            <div className="action-buttons">
-                                                {!isCalling ? (
-                                                    <button className="call-button" onClick={handleCall} disabled={!phoneNumber}>
-                                                        Call
-                                                    </button>
-                                                ) : (
-                                                    <button className="end-call-button" onClick={handleEndCall}>
-                                                        End Call
-                                                    </button>
-                                                )}
-
-                                                {/* {isCalling && (setIsCalling
+                                        {/* {isCalling && (setIsCalling
               <div className="timer">
                 {formatTime(callTimer)}
               </div>
             )} */}
-                                            </div>
-                                        </>
+                                    </div>
+                                </>
+                            ) : (
+                                <div className="call-history">
+                                    {callHistory.length === 0 ? (
+                                        <div className="text-center text-muted p-4">No call history</div>
                                     ) : (
-                                        <div className="call-history">
-                                            {callHistory.length === 0 ? (
-                                                <div className="text-center text-muted p-4">No call history</div>
-                                            ) : (
-                                                callHistory?.map((call) => (
-                                                    <div key={call.callId} className="call-item">
-                                                        <div className="call-number">{call.number}</div>
-                                                        <span className={`status-badge ${call.status}`}>{call.status}</span>
-                                                    </div>
-                                                ))
-                                            )}
-                                        </div>
+                                        callHistory?.map((call) => (
+                                            <div key={call.callId} className="call-item">
+                                                <div className="call-number">{call.number}</div>
+                                                <span className={`status-badge ${call.status}`}>{call.status}</span>
+                                            </div>
+                                        ))
                                     )}
                                 </div>
+                            )}
+                        </div>
+                    </div>
+                    {showUploadModal && (
+                        <div className="upload-leads-modal">
+                            <div className="upload-leads-modal-content">
+                                <h2>Import Leads</h2>
+                                <p>Upload a CSV file containing lead information.</p>
+                                <input
+                                    type="file"
+                                    accept=".csv"
+                                    onChange={(e) => setFile(e.target.files[0])}
+                                />
+                                <div className="upload-leads-modal-actions">
+                                    <button
+                                        className="cancel-button"
+                                        onClick={() => setShowUploadModal(false)}
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        className="upload-button"
+                                        onClick={handleFileUpload}
+                                    >
+                                        Upload
+                                    </button>
+                                </div>
                             </div>
-                            {showUploadModal && (
-                                <div className="upload-leads-modal">
-                                    <div className="upload-leads-modal-content">
-                                        <h2>Import Leads</h2>
-                                        <p>Upload a CSV file containing lead information.</p>
-                                        <input
-                                            type="file"
-                                            accept=".csv"
-                                            onChange={(e) => setFile(e.target.files[0])}
-                                        />
-                                        <div className="upload-leads-modal-actions">
-                                            <button
-                                                className="cancel-button"
-                                                onClick={() => setShowUploadModal(false)}
-                                            >
-                                                Cancel
-                                            </button>
-                                            <button
-                                                className="upload-button"
-                                                onClick={handleFileUpload}
-                                            >
-                                                Upload
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
-                            {editingLead && (
-                                <div className="edit-lead-modal">
-                                    <div className="edit-lead-modal-content">
-                                        <h2>Edit Lead</h2>
-                                        <form onSubmit={(e) => {
-                                            e.preventDefault();
-                                            updateLeadDetails(editingLead);
-                                        }}>
-                                            <label>
-                                                Name:
-                                                <input type="text" value={editingLead.name} onChange={(e) => setEditingLead({ ...editingLead, name: e.target.value })} />
-                                            </label>
-                                            <label>
-                                                Phone Number:
-                                                <input type="text" value={editingLead.phoneNumber} onChange={(e) => setEditingLead({ ...editingLead, phoneNumber: e.target.value })} />
-                                            </label>
-                                            <label>
-                                                Status:
-                                                <select value={editingLead.status} onChange={(e) => setEditingLead({ ...editingLead, status: e.target.value })}>
-                                                    <option value="New">New</option>
-                                                    <option value="In-Progress">In-Progress</option>
-                                                    <option value="Contacted">Contacted</option>
-                                                    <option value="Completed">Completed</option>
-                                                    <option value="Qualified">Qualified</option>
-                                                    <option value="Lost">Lost</option>
-                                                    <option value="Converted">Converted</option>
-                                                </select>
-                                            </label>
-                                            <label>
-                                                Last Contacted:
-                                                <input type="text" value={editingLead.lastContacted} onChange={(e) => setEditingLead({ ...editingLead, lastContacted: e.target.value })} />
-                                            </label>
-                                            <button type="submit" className="save-button">
-                                                Save
-                                            </button>
-                                            <button type="button" className="cancel-button" onClick={() => setEditingLead(null)}>
-                                                Cancel
-                                            </button>
-                                        </form>
-                                    </div>
-                                </div>
-                            )}
-                        </>
-                    } />
-                </Routes>
-            </Router>
-        </AuthProvider>
+                        </div>
+                    )}
+                    {editingLead && (
+                        <div className="edit-lead-modal">
+                            <div className="edit-lead-modal-content">
+                                <h2>Edit Lead</h2>
+                                <form onSubmit={(e) => {
+                                    e.preventDefault();
+                                    updateLeadDetails(editingLead);
+                                }}>
+                                    <label>
+                                        Name:
+                                        <input type="text" value={editingLead.name} onChange={(e) => setEditingLead({ ...editingLead, name: e.target.value })} />
+                                    </label>
+                                    <label>
+                                        Phone Number:
+                                        <input type="text" value={editingLead.phoneNumber} onChange={(e) => setEditingLead({ ...editingLead, phoneNumber: e.target.value })} />
+                                    </label>
+                                    <label>
+                                        Status:
+                                        <select value={editingLead.status} onChange={(e) => setEditingLead({ ...editingLead, status: e.target.value })}>
+                                            <option value="New">New</option>
+                                            <option value="In-Progress">In-Progress</option>
+                                            <option value="Contacted">Contacted</option>
+                                            <option value="Completed">Completed</option>
+                                            <option value="Qualified">Qualified</option>
+                                            <option value="Lost">Lost</option>
+                                            <option value="Converted">Converted</option>
+                                        </select>
+                                    </label>
+                                    <label>
+                                        Last Contacted:
+                                        <input type="text" value={editingLead.lastContacted} onChange={(e) => setEditingLead({ ...editingLead, lastContacted: e.target.value })} />
+                                    </label>
+                                    <button type="submit" className="save-button">
+                                        Save
+                                    </button>
+                                    <button type="button" className="cancel-button" onClick={() => setEditingLead(null)}>
+                                        Cancel
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                    )}
+                </ProtectedRoute>
+            } />
+        </Routes>
     );
 }
 
