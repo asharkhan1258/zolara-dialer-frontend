@@ -240,15 +240,42 @@ function App() {
 
         const handleCallStatus = (data) => {
             console.log('📱 Socket: Call status update received:', data);
+            
+            // Update call history
+            setCallHistory((prev) => {
+                const existingCall = prev.find(call => call.callId === data.callSid);
+                if (existingCall) {
+                    return prev.map(call =>
+                        call.callId === data.callSid ? { 
+                            ...call, 
+                            status: data.status,
+                            timestamp: data.timestamp,
+                            duration: data.duration
+                        } : call
+                    );
+                }
+
+                return [
+                    {
+                        callId: data.callSid,
+                        number: data.from || data.to || "Unknown",
+                        status: data.status,
+                        timestamp: data.timestamp,
+                        duration: data.duration
+                    },
+                    ...prev
+                ];
+            });
+
+            // Handle call state changes
             if (data.status === 'in-progress') {
                 startTimer();
-            } else if (data.status === 'completed' || data.status === 'rejected') {
+            } else if (['completed', 'canceled', 'busy', 'no-answer', 'failed'].includes(data.status)) {
                 stopNotificationSound();
                 stopTimer();
                 setIncomingCall(null);
                 setIsCalling(false);
             }
-            updateCallHistory(data);
         };
 
         // Socket connection events
@@ -361,7 +388,29 @@ function App() {
             }
         };
     }, []);
+    useEffect(() => {
+        const fetchCallHistory = async () => {
+            console.log(user, 'user....')
+            if (!user?._id) return;
 
+            try {
+                const response = await api.get(`/api/call-history/${user._id}`, {
+                    headers: { 'ngrok-skip-browser-warning': 'true' }
+                });
+                console.log('Call history:', response.data);
+                setCallHistory(response.data);
+            } catch (error) {
+                console.error('Error fetching call history:', error);
+            }
+        };
+
+        if (user) {
+            fetchCallHistory();
+            // Fetch call history periodically
+            const interval = setInterval(fetchCallHistory, 30000); // Every 30 seconds
+            return () => clearInterval(interval);
+        }
+    }, [user]);
 
     useEffect(() => {
         return () => {
@@ -471,6 +520,7 @@ function App() {
 
                 // Start Timer
                 startTimer();
+
             });
 
             connection.on('disconnect', () => {
@@ -495,11 +545,12 @@ function App() {
 
         try {
             setIsCalling(true);
-
+            console.log(user, 'user....')
             // Step 1: Initiate call via backend
             const response = await api.post('/api/calls/initiate', {
                 to: phoneNumber,
                 from: TWILIO_PHONE,
+                userId: user?._id
             });
 
             if (!response.data.success) {
@@ -604,7 +655,10 @@ function App() {
             // Step 1: End the call via API
             await api.post('/api/calls/end', {
                 callId: activeCall.callSid,
-            });
+            }, {
+                headers: { 'ngrok-skip-browser-warning': 'true' }
+            }
+            );
 
             console.log('✅ Call ended successfully.');
 
@@ -649,23 +703,22 @@ function App() {
             }
         };
     }, []);
-
+ 
     const updateCallHistory = (data) => {
+        console.log('📱 Call status update received:', data);
         const { from, status, callSid } = data;
-        setCallHistory(prev => {
-            const existingCall = prev.find(call => call.callId === callSid);
+        setCallHistory((prev) => {
+            const existingCall = prev.find(call => call.callId === data.callSid);
             if (existingCall) {
                 return prev.map(call =>
-                    call.callId === callSid
-                        ? { ...call, status }
-                        : call
+                    call.callId === data.callSid ? { ...call, status: data.status } : call
                 );
             }
             return [...prev, {
-                callId: callSid,
-                number: from,
-                status,
-                timestamp: new Date().toISOString()
+                callId: data.callSid,
+                number: data.from,
+                status: data.status,
+                timestamp: data.timestamp
             }];
         });
     };
@@ -831,8 +884,7 @@ function App() {
                                         </th>
                                         <th>Name</th>
                                         <th>Phone</th>
-                                        <th>Status</th>
-                                        <th>Last Contacted</th>
+                                        <th>Status</th> 
                                         <th>Action</th>
                                     </tr>
                                 </thead>
@@ -849,8 +901,7 @@ function App() {
                                             </td>
                                             <td>{lead.name}</td>
                                             <td>{lead.phoneNumber}</td>
-                                            <td>{lead.status}</td>
-                                            <td>{lead.lastContacted}</td>
+                                            <td>{lead.status}</td> 
                                             <td className='action-buttons'>
                                                 <button className='dial-button' onClick={() => handleDial(lead.phoneNumber)}>
                                                     <FaPhoneAlt />
@@ -961,11 +1012,12 @@ function App() {
                                     {callHistory.length === 0 ? (
                                         <div className="text-center text-muted p-4">No call history</div>
                                     ) : (
-                                        callHistory?.map((call) => (
+                                        callHistory.map((call) => (
                                             <div key={call.callId} className="call-item">
                                                 <div className="call-number">{call.number}</div>
                                                 <span className={`status-badge ${call.status}`}>{call.status}</span>
-                                            </div>
+                                                <span className="timestamp">{new Date(call.timestamp).toLocaleString()}</span>
+                                    </div>
                                         ))
                                     )}
                                 </div>
@@ -1027,10 +1079,7 @@ function App() {
                                             <option value="Converted">Converted</option>
                                         </select>
                                     </label>
-                                    <label>
-                                        Last Contacted:
-                                        <input type="text" value={editingLead.lastContacted} onChange={(e) => setEditingLead({ ...editingLead, lastContacted: e.target.value })} />
-                                    </label>
+                                     
                                     <button type="submit" className="save-button">
                                         Save
                                     </button>
