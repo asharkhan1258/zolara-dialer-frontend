@@ -12,10 +12,10 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     localStorage.setItem("user", JSON.stringify(user));
   }, [user]);
-
+const react_app_api_url = process.env.REACT_APP_API_URL || 'http://localhost:5000';
   const login = async (email, password) => {
     try {
-      const response = await fetch(`${process.env.REACT_APP_API_URL}/api/auth/login`, {
+      const response = await fetch(`${react_app_api_url}/api/auth/login`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

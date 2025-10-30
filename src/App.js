@@ -450,10 +450,9 @@ function App() {
         console.log('📞 Handling incoming connection:', connection.parameters);
 
         try {
-            // Start notification sound
+            // This is an incoming call from a customer
             startNotificationSound();
 
-            // Set incoming call state
             const callInfo = {
                 callSid: connection.parameters.callSid,
                 from: connection.parameters.From,
@@ -545,8 +544,9 @@ function App() {
 
         try {
             setIsCalling(true);
-            console.log(user, 'user....')
-            // Step 1: Initiate call via backend
+            console.log(user, 'user....', 'Initiating DIRECT call to:', phoneNumber);
+
+            // Notify backend (for logging/tracking)
             const response = await api.post('/api/calls/initiate', {
                 to: phoneNumber,
                 from: TWILIO_PHONE,
@@ -557,42 +557,54 @@ function App() {
                 throw new Error('Failed to initiate call.');
             }
 
-            console.log('📞 Call initiated:', response.data.callId);
-
-            // Step 2: Set the active call
-            setActiveCall({
-                callSid: response.data.callId,
-                to: phoneNumber
-            });
-
-            // Step 3: Connect using Twilio Device
-            const connection = await device.connect({
+            console.log('📞 Creating direct connection via device.connect()');
+            console.log('📞 Parameters:', {
                 To: phoneNumber,
-                From: TWILIO_PHONE
+                From: TWILIO_PHONE,
+                userId: user?._id
             });
+
+            // Direct connection - creates only ONE call (browser → customer)
+            const connection = await device.connect({
+                params: {
+                    To: phoneNumber,
+                    From: TWILIO_PHONE,
+                    userId: user?._id
+                }
+            });
+
+            console.log('📞 Connection created, waiting for accept event...');
 
             connection.on('accept', () => {
-                console.log('✅ Call connected.');
+                console.log('✅ Call connected to:', phoneNumber);
                 setCurrentConnection(connection);
+                setActiveCall({
+                    callSid: connection.parameters.CallSid,
+                    to: phoneNumber
+                });
+                startTimer();
             });
 
             connection.on('disconnect', () => {
-                console.log('📞 WebRTC Disconnected Automatically.');
+                console.log('📞 Call disconnected.');
                 setCurrentConnection(null);
                 setActiveCall(null);
                 setIsCalling(false);
+                stopTimer();
             });
 
             connection.on('error', (error) => {
-                console.error('❌ Call connection error:', error);
+                console.error('❌ Call error:', error);
                 setCurrentConnection(null);
                 setActiveCall(null);
                 setIsCalling(false);
+                stopTimer();
             });
 
         } catch (error) {
             console.error('❌ Error making call:', error);
             setIsCalling(false);
+            stopTimer();
         }
     };
 
@@ -650,45 +662,46 @@ function App() {
         }
 
         try {
-            console.log(`📢 Sending request to end call with CallSid: ${activeCall.callSid}`);
+            console.log(`📢 Ending call with CallSid: ${activeCall.callSid}`);
 
-            // Step 1: End the call via API
-            await api.post('/api/calls/end', {
-                callId: activeCall.callSid,
-            }, {
-                headers: { 'ngrok-skip-browser-warning': 'true' }
-            }
-            );
-
-            console.log('✅ Call ended successfully.');
-
-            // Step 2: Ensure WebRTC connection is fully closed
+            // Step 1: Disconnect WebRTC connection immediately
             if (currentConnection) {
                 console.log('🔴 Disconnecting WebRTC...');
                 currentConnection.disconnect();
                 setCurrentConnection(null);
             }
 
-            console.log('🔄 Restarting WebSocket connection...');
-            if (socket) {
-                socket.disconnect();
-                setTimeout(() => {
-                    socket.connect();
-                    console.log('✅ WebSocket reconnected.');
-                }, 1000);
+            // Step 2: Try to notify backend (don't wait if it fails)
+            try {
+                await api.post('/api/calls/end', {
+                    callId: activeCall.callSid,
+                }, {
+                    headers: { 'ngrok-skip-browser-warning': 'true' },
+                    timeout: 2000  // 2 second timeout
+                });
+                console.log('✅ Backend notified of call end.');
+            } catch (apiError) {
+                console.warn('⚠️ Could not notify backend, but call ended locally:', apiError.message);
+                // Continue anyway - call is already disconnected
             }
 
-            // Step 5: Re-initialize Twilio Device immediately
-            console.log('🔄 Re-initializing Twilio Device...');
-            await setupTwilioDevice();
-
-            // Step 6: Reset call states
+            // Step 3: Reset call states
             setActiveCall(null);
             setIsCalling(false);
+            stopTimer();
 
+            console.log('✅ Call ended successfully.');
 
         } catch (error) {
             console.error('❌ Error ending call:', error);
+            // Force cleanup even if there's an error
+            setActiveCall(null);
+            setIsCalling(false);
+            stopTimer();
+            if (currentConnection) {
+                currentConnection.disconnect();
+                setCurrentConnection(null);
+            }
         }
     };
 
